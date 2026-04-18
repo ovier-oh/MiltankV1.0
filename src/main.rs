@@ -18,7 +18,7 @@ impl Task {
     }
 }
 
-fn main() {
+fn create_task() {
     println!("Enter Id:");
     let mut id_input = String::new();
     io::stdin().read_line(&mut id_input).unwrap();
@@ -34,9 +34,13 @@ fn main() {
 
     let task = Task::new(id, title, comments);
 
-    println!("Id: {}", task.id);
+    println!("If: {}", task.id);
     println!("Title: {}", task.title);
     println!("Completed: {}", task.completed);
     println!("Comments: {}", task.comments);
+}
+
+fn main() {
+    create_task();
 }
 
