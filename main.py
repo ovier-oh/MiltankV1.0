@@ -2,6 +2,9 @@ import pandas as pd
 import matplotlib.pyplot as plt 
 from scipy.stats import shapiro 
 from typing import cast 
+from scipy import stats 
+from reliability.Fitters import Fit_Weibull_2P 
+import numpy as np 
 
 def load_csv(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
@@ -29,15 +32,6 @@ def describe_column(series: pd.Series, column: str) -> None:
     print(f"Median: {series.median():.4f}")
     print(f"P75: {series.quantile(0.75):.4f}")
 
-def plot_histogram(series: pd.Series, column: str) -> None:
-    plt.hist(series, bins=8, edgecolor="black")
-    plt.title(f"Histograma - {column}")
-    plt.xlabel(column)
-    plt.ylabel("Frequency")
-    plt.grid(True)
-    plt.show()
-
-
 def normality_test(series: pd.Series) -> None:
     print("\nShapiro-Wilk normality Test")
     print("-----------------------------")
@@ -58,6 +52,73 @@ def normality_test(series: pd.Series) -> None:
     else:
         print("Result: Data show a behaviour no normal distribuiton")
 
+def weibull_percentile_life(beta: float, eta: float, percentile: float) -> float:
+    """
+    Calcula la vida Bx para una distribucion Weibull 2P. 
+
+    percentile = probabilidad acumulada de falla 
+    Ejemplo:
+    0.10 -> B10 
+    0.01 -> B1 
+    0.0001 -> B0.01 
+    """
+    return eta * (-np.log(1 - percentile)) **(1 / beta)
+
+def weibull_analysis(series: pd.Series) -> None:
+    print("\nWeibull Analysis")
+    print("------------------")
+
+    try:
+        confidence = float(input("Nivel de confianza, ejemplo 0,60 0 0.90: "))
+        percentile = float(input("Percentil de falla, ejemplo 0.10, 0.01, 0.0001: "))
+
+        if not 0 < confidence < 1:
+            print("El nivel de confianza debe estar entre 0 y 1")
+            return 
+
+        if not 0 < percentile < 1:
+            print("El percentil debe estar entre 0 y 1")
+            return 
+
+        fit = Fit_Weibull_2P(
+                failures=series.values, 
+                show_probability_plot=True, 
+                print_results=True, 
+                CI=confidence
+                )
+        beta = fit.beta 
+        eta = fit.alpha 
+
+        bx_life = weibull_percentile_life(
+                beta=beta,
+                eta=eta,
+                percentile=percentile 
+                )
+
+        print("\nEstimacion de vida por percentil")
+        print("----------------------------------")
+        print(f"Confianza seleccionada: {confidence * 100:1f}%")
+        print(f"Percentil de falla: {percentile:.6f}")
+        print(f"B{percentile * 100:.4f}: {bx_life:.4f} horas")
+            
+    except Exception as e:
+        print(f"Error en Weibull Analysis: {e}")
+
+
+def plot_histogram(series: pd.Series, column: str) -> None:
+    plt.hist(series, bins=8, edgecolor="black")
+    plt.title(f"Histograma - {column}")
+    plt.xlabel(column)
+    plt.ylabel("Frequency")
+    plt.grid(True)
+    plt.show()
+
+def qq_plot(series: pd.Series, column: str) -> None:
+    plt.figure()
+    stats.probplot(series, dist ="norm", plot=plt)
+    plt.title(f"Q-Q Plot - {column}")
+    plt.grid(True)
+    plt.show()
 
 def main():
     path = input("Path of CSV: ").strip() 
@@ -73,6 +134,8 @@ def main():
     describe_column(series, column)
     normality_test(series)
     plot_histogram(series, column)
+    qq_plot(series, column)
+    weibull_analysis(series)
 
 if __name__ == "__main__":
     main() 
