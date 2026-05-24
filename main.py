@@ -7,7 +7,12 @@ from reliability.Fitters import Fit_Weibull_2P
 import numpy as np 
 
 def load_csv(path: str) -> pd.DataFrame:
-    return pd.read_csv(path)
+    df = pd.read_csv(path)
+
+    # Clean spaces 
+    df.columns = df.columns.str.strip() 
+
+    return df 
 
 def show_columns(df: pd.DataFrame) -> None: 
     print("\nColumn availables:")
@@ -64,20 +69,45 @@ def weibull_percentile_life(beta: float, eta: float, percentile: float) -> float
     """
     return eta * (-np.log(1 - percentile)) **(1 / beta)
 
+def bootstrap_b_life(series: pd.Series, percentile: float, confidence: float, n_bootstrap: int = 500) -> tuple[float, float, float]:
+    data =series.values
+    estimates = []
+
+    for _ in range(n_bootstrap):
+        sample = np.random.choice(data, size=len(data), replace=True)
+
+        try: 
+            fit = Fit_Weibull_2P(
+                    failures=sample, 
+                    show_probability_plot=False, 
+                    print_results=False
+                    )
+            beta= fit.beta
+            eta = fit.alpha 
+
+            bx = weibull_percentile_life(beta, eta, percentile) 
+            estimates.append(bx) 
+        except Exception:
+            continue 
+    estimates = np.array(estimates)
+    estimate = np.median(estimates)
+    alpha = 1 - confidence 
+    lower = np.quantile(estimates, alpha /2) 
+    upper = np.quantile(estimates, 1 - alpha /2) 
+
+    return estimate, lower, upper 
+
+
 def weibull_analysis(series: pd.Series) -> None:
     print("\nWeibull Analysis")
     print("------------------")
 
     try:
-        confidence = float(input("Nivel de confianza, ejemplo 0,60 0 0.90: "))
-        percentile = float(input("Percentil de falla, ejemplo 0.10, 0.01, 0.0001: "))
+        confidence = float(input("Nivel de confianza, ejemplo 0.60 0 0.90: "))
+        percentiles = [ 0.50, 0.10, 0.01, 0.001, 0.0001 ]
 
         if not 0 < confidence < 1:
             print("El nivel de confianza debe estar entre 0 y 1")
-            return 
-
-        if not 0 < percentile < 1:
-            print("El percentil debe estar entre 0 y 1")
             return 
 
         fit = Fit_Weibull_2P(
@@ -88,19 +118,25 @@ def weibull_analysis(series: pd.Series) -> None:
                 )
         beta = fit.beta 
         eta = fit.alpha 
-
-        bx_life = weibull_percentile_life(
-                beta=beta,
-                eta=eta,
-                percentile=percentile 
-                )
-
+         
         print("\nEstimacion de vida por percentil")
         print("----------------------------------")
         print(f"Confianza seleccionada: {confidence * 100:1f}%")
-        print(f"Percentil de falla: {percentile:.6f}")
-        print(f"B{percentile * 100:.4f}: {bx_life:.4f} horas")
-            
+
+        print("\nTable B-life")
+        print("--------------")
+                
+        for p in percentiles:
+            bx_life = weibull_percentile_life(beta = beta, eta = eta, percentile = p)
+            boot_estimate, lower, upper = bootstrap_b_life(series = series, percentile = p, confidence = confidence, n_bootstrap = 500)
+
+            print(
+                    f"B{p * 100:.4f} ->"
+                    f"Estimate: {bx_life:.4f} h |"
+                    f"Lower {confidence * 100: .0f}%: {lower:.4f} h |"
+                    f"Upper {confidence * 100: .0f}%: {upper:.4f} h"
+                    ) 
+      
     except Exception as e:
         print(f"Error en Weibull Analysis: {e}")
 
